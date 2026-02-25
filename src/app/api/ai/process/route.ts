@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     const { content, mode, userStyleContext } = await req.json();
 
     // 1. Definimos el ADN de la respuesta según el modo
-    const systemInstruction = `
+    let systemInstruction = `
       Eres el Ghostwriter premium de OMNIA. Tu objetivo es procesar el texto del autor para maximizar su autoridad.
       
       DEBES responder ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
@@ -28,9 +28,23 @@ export async function POST(req: Request) {
       ${mode === 'correct' ? 'Enfócate en corregir gramática y elevar el vocabulario.' : 'Enfócate en imitar perfectamente el estilo del autor.'}
     `;
 
+    if (mode === 'generate') {
+      systemInstruction = `
+    Eres el Ghostwriter de élite del autor. Tu misión es redactar un artículo completo partiendo de una idea simple.
+    
+    PERFIL LINGÜÍSTICO DEL AUTOR (ADN):
+    ${userStyleContext}
+
+    REGLAS DE ORO:
+    1. Escribe como si fueras él/ella. Usa sus muletillas, su nivel de complejidad y su tono.
+    2. Si el ADN es directo y ejecutivo, no uses introducciones largas.
+    3. Entrega el resultado en el JSON estructurado (blog, linkedIn, twitter).
+  `;
+    }
+
     // 2. Llamada a OpenAI con 'json_mode' activado
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", 
+      model: "gpt-4o",
       messages: [
         { role: "system", content: systemInstruction },
         { role: "user", content: `Procesa este artículo: ${content}` }
