@@ -48,34 +48,41 @@ export default function OmniaEditor() {
     setCurrentAction(mode === 'generate' ? 'Redactando con tu estilo...' : 'Puliendo tu texto...');
 
     try {
-      const response = await fetch('/api/ai/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          content: input, 
-          mode: mode,
-          goal: goal, // Enviamos el objetivo a la IA
-          userStyleContext: profile?.writing_style_context 
-        }),
-      });
+  const response = await fetch('/api/ai/process', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      content: input, 
+      mode: mode,
+      goal: goal,
+      userStyleContext: profile?.writing_style_context 
+    }),
+  });
 
-      const data = await response.json();
-      
-      if (data.error) throw new Error(data.error);
+  const data = await response.json();
+  
+  // --- ESTE ES EL CAMBIO CLAVE ---
+  if (response.ok && data.blog) {
+    // Si todo salió bien y tenemos el campo 'blog', llenamos los estados
+    setContent(data.blog);
+    setAiLinkedInVersion(data.linkedIn || '');
+    setAiTwitterVersion(data.twitter || '');
+    
+    if (mode === 'generate') setPromptIdea('');
+  } else {
+    // Si la API devolvió un error o el JSON no tiene lo que esperábamos
+    const errorMsg = data.error || "La IA no pudo estructurar el contenido. Intenta de nuevo.";
+    throw new Error(errorMsg);
+  }
+  // -------------------------------
 
-      setContent(data.blog);
-      setAiLinkedInVersion(data.linkedIn);
-      setAiTwitterVersion(data.twitter);
-      
-      if (mode === 'generate') setPromptIdea(''); // Limpiamos la idea tras generar
-      
-    } catch (error) {
-      console.error(error);
-      alert("Hubo un error con la IA. Revisa tu API Key de OpenAI.");
-    } finally {
-      setIsProcessing(false);
-      setCurrentAction('');
-    }
+} catch (error: any) {
+  console.error("Error en la generación:", error);
+  alert(`Aviso de OMNIA: ${error.message}`);
+} finally {
+  setIsProcessing(false);
+  setCurrentAction('');
+}
   };
 
   const handlePublish = async () => {

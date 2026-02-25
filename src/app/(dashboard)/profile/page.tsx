@@ -2,15 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@/utils/supabase/client';
-import { 
-  Camera, 
-  Save, 
-  Loader2, 
-  CheckCircle2, 
-  Dna, 
-  Globe, 
-  Copy, 
-  ExternalLink 
+import {
+  Camera,
+  Save,
+  Loader2,
+  CheckCircle2,
+  Dna,
+  Globe,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 
 export default function ProfileSettings() {
@@ -59,14 +59,31 @@ export default function ProfileSettings() {
 
   const updateProfile = async () => {
     setSaving(true);
-    const { error } = await supabase.from('profiles').update({
-      full_name: fullName,
-      bio: bio,
-      updated_at: new Date().toISOString(),
-    }).eq('id', id);
 
-    if (error) alert("Error al actualizar");
-    else alert("¡Perfil actualizado con éxito!");
+    // Verificación de seguridad: ¿Tenemos el ID del usuario?
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      alert("Sesión expirada. Por favor, re-inicia sesión.");
+      setSaving(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({
+        full_name: fullName,
+        bio: bio,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id); // Usamos user.id directamente para estar seguros
+
+    if (error) {
+      console.error("Error de Supabase:", error);
+      alert(`Error al guardar: ${error.message}`);
+    } else {
+      alert("¡Perfil guardado correctamente!");
+    }
     setSaving(false);
   };
 
@@ -128,14 +145,14 @@ export default function ProfileSettings() {
           </div>
         </div>
         <div className="flex gap-2">
-          <button 
+          <button
             onClick={copyPublicLink}
             className="flex items-center gap-2 px-5 py-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl text-sm font-bold transition-all text-slate-600"
           >
             Copiar Enlace
           </button>
-          <a 
-            href={publicUrl} 
+          <a
+            href={publicUrl}
             target="_blank"
             className="p-2.5 bg-[#5D737E] text-white rounded-xl hover:bg-[#2D3436] transition-all"
           >
@@ -167,8 +184,8 @@ export default function ProfileSettings() {
           <div className="space-y-4">
             <div>
               <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Nombre Completo</label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 className="w-full mt-2 p-4 bg-slate-50 border-transparent rounded-2xl outline-none focus:ring-2 focus:ring-[#5D737E]/20 font-bold text-[#2D3436]"
@@ -176,7 +193,7 @@ export default function ProfileSettings() {
             </div>
             <div>
               <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Biografía Ejecutiva</label>
-              <textarea 
+              <textarea
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 className="w-full mt-2 p-4 bg-slate-50 border-transparent rounded-2xl outline-none focus:ring-2 focus:ring-[#5D737E]/20 h-32 resize-none leading-relaxed"
@@ -184,8 +201,8 @@ export default function ProfileSettings() {
               />
             </div>
           </div>
-          
-          <button 
+
+          <button
             onClick={updateProfile}
             disabled={saving}
             className="flex items-center gap-2 bg-[#2D3436] text-white px-10 py-4 rounded-2xl font-bold hover:bg-[#5D737E] transition-all shadow-xl active:scale-95"
