@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
     const openai = new OpenAI({ apiKey });
     // 2. Inicializamos el cliente de Supabase para Servidor
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = await createClient(supabaseUrl, supabaseKey);
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
