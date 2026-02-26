@@ -3,49 +3,29 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+import { createClient } from '@supabase/supabase-js'; // Usa el cliente directo para evitar problemas de middleware
 
 export async function POST(req: Request) {
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 55000);
   try {
-    // 1. Esperamos a que las cookies se resuelvan
-    const cookieStore = await cookies();
     const apiKey = process.env.OPENAI_API_KEY;
-    
-    // VALIDACIÓN CRÍTICA: Si la API KEY no llega, respondemos JSON, no error 500
-    if (!apiKey) {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    // DIAGNÓSTICO PREVENTIVO
+    if (!apiKey || !supabaseUrl || !supabaseKey) {
       return NextResponse.json({ 
-        error: "La API Key de OpenAI no está configurada en Amplify." 
+        error: "Faltan configuraciones en el servidor",
+        debug: { 
+          hasOpenAI: !!apiKey, 
+          hasUrl: !!supabaseUrl, 
+          hasKey: !!supabaseKey 
+        }
       }, { status: 500 });
     }
 
     const openai = new OpenAI({ apiKey });
     // 2. Inicializamos el cliente de Supabase para Servidor
-    const supabase = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll() {
-            return cookieStore.getAll();
-          },
-          setAll(cookiesToSet) {
-            try {
-              cookiesToSet.forEach(({ name, value, options }) =>
-                cookieStore.set(name, value, options)
-              );
-            } catch {
-              // El middleware se encarga de esto si es necesario
-            }
-          },
-        },
-      }
-    );
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
@@ -71,8 +51,7 @@ export async function POST(req: Request) {
         { role: "system", content: "Analiza el estilo de forma ultra-concisa y rápida." },
         { role: "user", content: `Analiza: ${allTexts.substring(0, 4000)}` } // Limitamos texto para velocidad
       ]
-    }, { signal: controller.signal });
-    clearTimeout(timeoutId);
+    });
     const styleDna = response.choices[0].message.content;
 
     // 5. Guardar en la tabla profiles
@@ -85,9 +64,13 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true, dna: styleDna });
   } catch (error: any) {
-    console.error("DETALLE DEL ERROR:", error);
-    return NextResponse.json({ 
-      error: "Error en el servidor: " + (error.name === 'AbortError' ? "Tiempo de espera agotado" : error.message)
-    }, { status: 500 });
+    // ESTO ES VITAL: Enviamos el error como JSON para que el frontend lo lea
+    return new Response(JSON.stringify({ 
+      error: error.message || "Error interno desconocido",
+      stack: error.stack 
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
