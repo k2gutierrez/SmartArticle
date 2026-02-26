@@ -74,21 +74,36 @@ export default function TrainAI() {
 
   // 2. La función para disparar el análisis
   const handleAnalyzeStyle = async () => {
-    if (inputs.length < 3) {
-      alert("Sube al menos 3 ejemplos de tu escritura para un mejor resultado.");
-      return;
-    }
-
     setIsAnalyzing(true);
     try {
-      const response = await fetch('/api/ai/train-style', { method: 'POST' });
-      const data = await response.json();
+      const supabase = createClient();
 
-      if (data.success) {
+      // 1. Obtenemos la sesión actual directamente del navegador
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("No hay sesión activa. Por favor, recarga la página.");
+      }
+
+      // 2. Enviamos la petición incluyendo el Token explícitamente
+      const response = await fetch('/api/ai/train-style', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}` // <--- LA BALA DE PLATA
+        }
+      });
+
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.indexOf("application/json") !== -1) {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Error en el servidor");
+
         setDnaGenerated(true);
-        alert("¡ADN generado con éxito! OMNIA ahora conoce tu voz.");
+        alert("¡Voz clonada con éxito!");
       } else {
-        throw new Error(data.error);
+        const textError = await response.text();
+        throw new Error("El servidor no respondió correctamente.");
       }
     } catch (error: any) {
       alert("Error: " + error.message);
