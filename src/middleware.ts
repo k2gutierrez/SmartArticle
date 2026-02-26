@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
@@ -13,37 +13,31 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value
+        getAll() {
+          return request.cookies.getAll()
         },
-        set(name: string, value: string, options: CookieOptions) {
-          // Actualizamos la petición y la respuesta simultáneamente
-          request.cookies.set({ name, value, ...options })
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value))
           response = NextResponse.next({
             request: {
               headers: request.headers,
             },
           })
-          response.cookies.set({ name, value, ...options })
-        },
-        remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          response.cookies.set({ name, value: '', ...options })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          )
         },
       },
     }
   )
 
+  // IMPORTANTE: Esto refresca la sesión si ha expirado
   const { data: { user } } = await supabase.auth.getUser()
 
   const protectedRoutes = ['/editor', '/profile', '/train', '/dashboard']
   const isProtectedRoute = protectedRoutes.some(path => request.nextUrl.pathname.startsWith(path))
 
+  // Redirecciones de seguridad
   if (!user && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
@@ -58,8 +52,9 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     /*
-     * Excluimos archivos estáticos y las rutas que DEBEN ser públicas
+     * Excluimos estáticos pero incluimos TODAS las rutas de API
+     * para que el token se refresque antes de llegar a la IA.
      */
-    '/((?!_next/static|_next/image|favicon.ico|perfil|api/ai/process|auth/callback).*)',
+    '/((?!_next/static|_next/image|favicon.ico|perfil|auth/callback).*)',
   ],
 }
