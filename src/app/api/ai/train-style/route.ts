@@ -13,13 +13,14 @@ export async function POST(req: Request) {
 
     // DIAGNÓSTICO PREVENTIVO
     if (!apiKey || !supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ 
-        error: "Faltan configuraciones en el servidor",
-        debug: { 
-          hasOpenAI: !!apiKey, 
-          hasUrl: !!supabaseUrl, 
-          hasKey: !!supabaseKey 
-        }
+      const missing = [];
+      if (!apiKey) missing.push("OPENAI_API_KEY");
+      if (!supabaseUrl) missing.push("NEXT_PUBLIC_SUPABASE_URL");
+      if (!supabaseKey) missing.push("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+
+      return NextResponse.json({
+        error: `Faltan variables: ${missing.join(", ")}`,
+        intentalo: "Asegúrate de que estas variables estén en la consola de Amplify y haz un Re-deploy."
       }, { status: 500 });
     }
 
@@ -37,8 +38,8 @@ export async function POST(req: Request) {
       .eq('user_id', user.id);
 
     if (!trainingData || trainingData.length < 3) {
-      return NextResponse.json({ 
-        error: "Sube al menos 3 textos para que OMNIA pueda detectar un patrón de voz real." 
+      return NextResponse.json({
+        error: "Sube al menos 3 textos para que OMNIA pueda detectar un patrón de voz real."
       }, { status: 400 });
     }
 
@@ -65,9 +66,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, dna: styleDna });
   } catch (error: any) {
     // ESTO ES VITAL: Enviamos el error como JSON para que el frontend lo lea
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       error: error.message || "Error interno desconocido",
-      stack: error.stack 
+      stack: error.stack
     }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
