@@ -1,21 +1,32 @@
 import { createClient } from '@/utils/supabase/server';
 import { notFound } from 'next/navigation';
-import { Linkedin, Twitter, Globe, ArrowRight } from 'lucide-react';
+import { Linkedin, Twitter, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 
-export default async function PublicProfile({ params }: { params: { slug: string } }) {
+// Definimos la interfaz para los params
+interface PageProps {
+  params: Promise<{ slug: string }>;
+}
+
+export default async function PublicProfile({ params }: PageProps) {
+  // 1. DESENVOLVER PARAMS (Vital en Next.js 15)
+  const { slug } = await params;
+  
   const supabase = await createClient();
 
-  // 1. Obtener los datos del autor por su slug
+  // 2. Obtener los datos del autor por su slug
   const { data: profile } = await supabase
     .from('profiles')
     .select('*')
-    .eq('profile_slug', params.slug)
+    .eq('profile_slug', slug)
     .single();
 
-  if (!profile) notFound();
+  if (!profile) {
+    console.error("No se encontró el perfil para el slug:", slug);
+    notFound();
+  }
 
-  // 2. Obtener los artículos publicados de este autor
+  // 3. Obtener los artículos publicados
   const { data: articles } = await supabase
     .from('articles')
     .select('*')
@@ -25,14 +36,14 @@ export default async function PublicProfile({ params }: { params: { slug: string
 
   return (
     <div className="min-h-screen bg-[#FBFBFA] text-[#2D3436] font-sans">
-      {/* Header / Hero del Autor */}
+      {/* Hero del Autor */}
       <header className="bg-white border-b border-slate-100 pt-20 pb-12 px-6">
         <div className="max-w-3xl mx-auto text-center space-y-6">
           <div className="w-28 h-28 rounded-full overflow-hidden mx-auto border-4 border-[#F4F5F2] shadow-sm">
             {profile.avatar_url ? (
               <img src={profile.avatar_url} alt={profile.full_name} className="w-full h-full object-cover" />
             ) : (
-              <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400">
+              <div className="w-full h-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold">
                 {profile.full_name?.charAt(0)}
               </div>
             )}
@@ -43,15 +54,6 @@ export default async function PublicProfile({ params }: { params: { slug: string
             <p className="text-xl text-slate-500 max-w-xl mx-auto leading-relaxed">
               {profile.bio || "Autor de pensamiento original y estrategia en OMNIA."}
             </p>
-          </div>
-
-          <div className="flex justify-center gap-4 pt-4">
-            <button className="p-3 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors">
-              <Linkedin size={20} className="text-[#0077B5]" />
-            </button>
-            <button className="p-3 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors">
-              <Twitter size={20} className="text-black" />
-            </button>
           </div>
         </div>
       </header>
@@ -64,13 +66,12 @@ export default async function PublicProfile({ params }: { params: { slug: string
 
         <div className="space-y-12">
           {articles?.map((article) => (
-            <article key={article.id} className="group cursor-pointer">
-              <Link href={`/perfil/${params.slug}/${article.id}`}>
-                <div className="space-y-3">
+            <article key={article.id} className="group">
+              {/* IMPORTANTE: Usamos el article_slug para la URL */}
+              <Link href={`/perfil/${slug}/${article.article_slug}`}>
+                <div className="space-y-3 cursor-pointer">
                   <div className="flex items-center gap-3 text-sm text-slate-400 font-medium">
                     <span>{new Date(article.created_at).toLocaleDateString('es-ES', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
-                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                    <span>5 min lectura</span>
                   </div>
                   <h3 className="text-2xl font-bold group-hover:text-[#5D737E] transition-colors leading-tight">
                     {article.title}
@@ -93,13 +94,6 @@ export default async function PublicProfile({ params }: { params: { slug: string
           )}
         </div>
       </main>
-
-      {/* Footer minimalista */}
-      <footer className="py-20 text-center border-t border-slate-100 mt-20">
-        <p className="text-sm text-slate-300 font-bold tracking-widest uppercase">
-          Creado con <span className="text-[#5D737E]">OMNIA</span> — El ADN de los líderes.
-        </p>
-      </footer>
     </div>
   );
 }
