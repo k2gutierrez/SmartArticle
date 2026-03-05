@@ -31,8 +31,24 @@ export default function TrainAI() {
     if (data) setInputs(data);
   };
 
+  // NUEVO: Función para contar palabras
+  const countWords = (text: string) => {
+    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+  };
+
+  // ACTUALIZADO: Función saveInput con validación
   const saveInput = async () => {
     if (!inputText) return;
+
+    // 1. Validación de longitud mínima
+    const minWords = 50;
+    const wordCount = countWords(inputText);
+
+    if (wordCount < minWords) {
+      alert(`Para que OMNIA aprenda tu estilo, necesitamos al menos ${minWords} palabras. Llevas ${wordCount}. ¡Cuéntanos un poco más!`);
+      return;
+    }
+
     setIsSaving(true);
 
     try {

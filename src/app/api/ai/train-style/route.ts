@@ -10,13 +10,13 @@ export async function POST(req: Request) {
     // 1. VALIDACIÓN DE VARIABLES DE ENTORNO
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      return NextResponse.json({ 
-        error: "Falta configurar la OPENAI_API_KEY en AWS Amplify." 
+      return NextResponse.json({
+        error: "Falta configurar la OPENAI_API_KEY en AWS Amplify."
       }, { status: 500 });
     }
 
     const openai = new OpenAI({ apiKey });
-    
+
     // El helper asume que ya arreglaste el `await cookies()` en utils/supabase/server.ts
     const supabase = await createClient();
 
@@ -44,44 +44,49 @@ export async function POST(req: Request) {
     // Si aún así no hay usuario, rechazamos la petición
     if (authError || !user) {
       console.error("Error de Auth en Servidor:", authError);
-      return NextResponse.json({ 
-        error: "No autorizado (401)", 
-        detalles: "El token de sesión no es válido. Cierra sesión y vuelve a entrar." 
+      return NextResponse.json({
+        error: "No autorizado (401)",
+        detalles: "El token de sesión no es válido. Cierra sesión y vuelve a entrar."
       }, { status: 401 });
     }
 
-    // 4. OBTENER LOS TEXTOS DEL USUARIO
-    // Extraemos los artículos publicados del autor para analizarlos
-    const { data: articles, error: articlesError } = await supabase
-      .from('articles')
-      .select('content_original')
+    // 4. OBTENER LOS TEXTOS DEL USUARIO (Corregido a training_data)
+    const { data: trainingData, error: trainingError } = await supabase
+      .from('training_data')
+      .select('content')
       .eq('user_id', user.id)
-      .not('content_original', 'is', null) // Aseguramos que tengan texto
-      .limit(15); // Límite razonable para no sobrecargar
+      .not('content', 'is', null)
+      .limit(15);
 
-    if (articlesError || !articles || articles.length === 0) {
-      return NextResponse.json({ 
-        error: "No hay suficientes artículos redactados para clonar tu voz. Escribe algunos primero." 
+    if (trainingError || !trainingData || trainingData.length === 0) {
+      return NextResponse.json({
+        error: "No hay suficientes textos de entrenamiento para clonar tu voz. Agrega algunos primero."
       }, { status: 400 });
     }
 
-    // Unimos los textos y los limitamos a ~12,000 caracteres para evitar Timeouts
-    const allTexts = articles.map(a => a.content_original).join('\n\n').substring(0, 12000);
+    // CONCATENACIÓN: Unimos los textos con un separador claro para la IA
+    const allTexts = trainingData
+      .map(t => t.content)
+      .join('\n\n--- SIGUIENTE TEXTO DE REFERENCIA ---\n\n')
+      .substring(0, 12000); // Límite de seguridad para Vercel/Amplify
 
-    // 5. LLAMADA A OPENAI (ULTRA-RÁPIDA)
+    // 5. LLAMADA A OPENAI (Con Prompt ajustado)
+    const systemPrompt = `
+      Eres un experto lingüista. Tu tarea es analizar los textos del usuario y definir su "ADN de escritura".
+      
+      REGLAS:
+      1. Identifica el tono, muletillas, estructura de oraciones, nivel de formalidad y ritmo.
+      2. Responde de forma concisa, directa y estructurada en viñetas.
+      3. IMPORTANTE (Fallback): Si consideras que los textos proporcionados son demasiado cortos o genéricos para extraer un estilo personal muy marcado, NO te disculpes ni menciones que falta información. Simplemente define un "ADN de escritura estándar, claro y profesional" basándote en lo poco que puedas deducir.
+    `;
+
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // Fundamental para que AWS no corte la petición por tiempo
+      model: "gpt-4o-mini",
       messages: [
-        { 
-          role: "system", 
-          content: "Eres un experto lingüista. Analiza los textos del usuario y define su ADN de escritura (tono, muletillas, estructura de oraciones, nivel de formalidad, ritmo). Responde de forma concisa, directa y estructurada en viñetas." 
-        },
-        { 
-          role: "user", 
-          content: `Analiza el estilo de los siguientes textos para clonar la voz del autor:\n\n${allTexts}` 
-        }
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `Analiza el estilo de los siguientes textos para clonar la voz del autor:\n\n${allTexts}` }
       ],
-      temperature: 0.3, // Temperatura baja para que sea analítico y no creativo
+      temperature: 0.3,
     });
 
     const styleDna = response.choices[0].message.content;
@@ -91,10 +96,9 @@ export async function POST(req: Request) {
     }
 
     // 6. GUARDAR EL RESULTADO EN LA BASE DE DATOS
-    // NOTA: Revisa que la columna en tu tabla 'profiles' se llame exactamente 'style_dna'
     const { error: updateError } = await supabase
       .from('profiles')
-      .update({ writing_style_context: styleDna }) 
+      .update({ writing_style_context: styleDna })
       .eq('id', user.id);
 
     if (updateError) {
@@ -107,10 +111,10 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     console.error("DETALLE DEL ERROR EN TRAIN-STYLE:", error);
-    
+
     // EVITAR EL "Unexpected token I" EN EL FRONTEND
     // Pase lo que pase, devolvemos un JSON limpio con el mensaje de error
-    return new Response(JSON.stringify({ 
+    return new Response(JSON.stringify({
       error: error.message || "Error interno en el servidor de Amplify."
     }), {
       status: 500,
